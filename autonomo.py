@@ -6,10 +6,10 @@ import threading, time, cv2
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 # --- Configuracion navegacion ---
-DISTANCIA_MIN = 0.5
-DISTANCIA_FRENO = 0.8
-DISTANCIA_LATERAL = 0.4
-VELOCIDAD = 800
+DISTANCIA_MIN = 0.20
+DISTANCIA_FRENO = 0.30
+DISTANCIA_LATERAL = 0.40
+VELOCIDAD = 30
 
 # --- Configuracion Pivot ---
 STEERING_SERVO_ID = 1
@@ -40,7 +40,6 @@ distancia_frente = 999
 distancia_izquierda = 999
 distancia_derecha = 999
 
-# --- Funciones Pivot ---
 def set_servo(angle_deg):
     try:
         car.set_pwm_servo(STEERING_SERVO_ID, int(angle_deg))
@@ -58,27 +57,19 @@ def compute_pivot_motors(w_sign):
 
 def hacer_pivot(w_sign, duracion=1.2):
     print(f"PIVOT {'IZQUIERDA' if w_sign > 0 else 'DERECHA'}")
-
-    # Centrar servo con counter-steer
     if USE_SERVO_COUNTER_STEER:
         angle = SERVO_CENTER_DEG + (SERVO_COUNTER_STEER_DEG * w_sign)
     else:
         angle = SERVO_CENTER_DEG
     set_servo(angle)
     time.sleep(SERVO_SETTLE_SEC)
-
-    # Calcular motores
     left, right = compute_pivot_motors(w_sign)
-
-    # Ejecutar pivot con pulsos
     inicio = time.time()
     fase = 'on'
     fase_inicio = time.time()
-
     while time.time() - inicio < duracion:
         ahora = time.time()
         fase_elapsed = ahora - fase_inicio
-
         if USE_PULSED_PIVOT:
             if fase == 'on':
                 car.set_motor(left, left, right, right)
@@ -93,16 +84,12 @@ def hacer_pivot(w_sign, duracion=1.2):
                     fase_inicio = ahora
         else:
             car.set_motor(left, left, right, right)
-
         time.sleep(0.02)
-
-    # Detener y centrar
     car.set_motor(0, 0, 0, 0)
     set_servo(SERVO_CENTER_DEG)
     time.sleep(0.3)
     print("Pivot completado")
 
-# --- Camara ---
 class LidarNode(Node):
     def __init__(self):
         super().__init__('navegacion_autonoma')
@@ -166,7 +153,6 @@ def server_loop():
     server = HTTPServer(('0.0.0.0', 8080), StreamHandler)
     server.serve_forever()
 
-# --- Navegacion ---
 def frenar():
     print("FRENANDO")
     car.set_motor(0, 0, 0, 0)
@@ -182,14 +168,18 @@ def retroceder():
     print("RETROCEDIENDO")
     car.set_car_motion(0, 0, 0)
     time.sleep(0.1)
-    car.set_motor(-400, -400, -400, -400)
-    time.sleep(0.6)
+    car.set_motor(-30, -30, -30, -30)
+    time.sleep(1.0)
     car.set_motor(0, 0, 0, 0)
     time.sleep(0.3)
 
 def navegacion_loop():
     global running
     time.sleep(2)
+
+    print("Enderezando llantas...")
+    set_servo(SERVO_CENTER_DEG)
+    time.sleep(1.0)
     print("Iniciando navegacion autonoma con G-Turn Pivot...")
 
     while running:
@@ -200,7 +190,7 @@ def navegacion_loop():
                 print("Cerca — lento")
                 car.set_car_motion(0, 0, 0)
                 time.sleep(0.05)
-                car.set_motor(400, 400, 400, 400)
+                car.set_motor(20, 20, 20, 20)
             else:
                 print("Avanzando")
                 avanzar_recto()
@@ -211,12 +201,10 @@ def navegacion_loop():
 
             if distancia_derecha > DISTANCIA_LATERAL:
                 print("--- PIVOT DERECHA ---")
-                hacer_pivot(-1)  # -1 = derecha
-
+                hacer_pivot(-1)
             elif distancia_izquierda > DISTANCIA_LATERAL:
                 print("--- PIVOT IZQUIERDA ---")
-                hacer_pivot(+1)  # +1 = izquierda
-
+                hacer_pivot(+1)
             else:
                 print("--- RETROCEDER ---")
                 retroceder()
@@ -243,7 +231,7 @@ def main():
     threading.Thread(target=server_loop, daemon=True).start()
     threading.Thread(target=navegacion_loop, daemon=True).start()
 
-    print("Stream en http://10.43.54.184:8080")
+    print("Stream en http://10.43.48.208:8080")
     print("Presiona Ctrl+C para detener")
 
     try:
